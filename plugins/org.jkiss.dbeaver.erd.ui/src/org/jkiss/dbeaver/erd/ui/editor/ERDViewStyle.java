@@ -16,31 +16,31 @@
  */
 package org.jkiss.dbeaver.erd.ui.editor;
 
-import org.jkiss.dbeaver.Log;
-import org.jkiss.dbeaver.erd.model.ERDAttributeVisibility;
+import org.jkiss.code.NotNull;
 import org.jkiss.dbeaver.erd.model.ERDConstants;
 import org.jkiss.dbeaver.erd.ui.internal.ERDUIMessages;
 import org.jkiss.dbeaver.model.preferences.DBPPreferenceStore;
 import org.jkiss.utils.CommonUtils;
 
+import java.util.Arrays;
+import java.util.Objects;
+import java.util.StringJoiner;
+
 /**
  * Entity attribute presentation
  */
-public enum ERDViewStyle
-{
-    ICONS(1, ERDUIMessages.erd_view_style_selection_item_icons),
-    TYPES(2, ERDUIMessages.erd_view_style_selection_item_data_types),
-    NULLABILITY(4, ERDUIMessages.erd_view_style_selection_item_nullability),
-    COMMENTS(8, ERDUIMessages.erd_view_style_selection_item_comments),
-    ENTITY_FQN(16, ERDUIMessages.erd_view_style_selection_item_fully_qualified_names)
-    ;
+public enum ERDViewStyle {
+    ICONS(ERDUIMessages.erd_view_style_selection_item_icons, 1),
+    TYPES(ERDUIMessages.erd_view_style_selection_item_data_types, 1 << 1),
+    NULLABILITY(ERDUIMessages.erd_view_style_selection_item_nullability, 1 << 2),
+    COMMENTS(ERDUIMessages.erd_view_style_selection_item_comments, 1 << 3),
+    ENTITY_FQN(ERDUIMessages.erd_view_style_selection_item_fully_qualified_names, 1 << 4),
+    ALPHABETICAL_ORDER(ERDUIMessages.erd_view_style_selection_item_alphabetical_order, 1 << 5);
 
     private final int value;
     private final String title;
 
-    private static final Log log = Log.getLog(ERDAttributeVisibility.class);
-
-    ERDViewStyle(int value, String title) {
+    ERDViewStyle(@NotNull String title, int value) {
         this.value = value;
         this.title = title;
     }
@@ -49,38 +49,29 @@ public enum ERDViewStyle
         return value;
     }
 
+    @NotNull
     public String getTitle() {
         return title;
     }
 
-    public static ERDViewStyle[] getDefaultStyles(DBPPreferenceStore store)
-    {
-        String attrString = store.getString(ERDConstants.PREF_ATTR_STYLES);
+    @NotNull
+    public static ERDViewStyle[] getDefaultStyles(@NotNull DBPPreferenceStore store) {
+        final String attrString = store.getString(ERDConstants.PREF_ATTR_STYLES);
         if (!CommonUtils.isEmpty(attrString)) {
-            String[] psList = attrString.split(","); //$NON-NLS-1$
-            ERDViewStyle[] pList = new ERDViewStyle[psList.length];
-            for (int i = 0; i < psList.length; i++) {
-                try {
-                    pList[i] = ERDViewStyle.valueOf(psList[i]);
-                } catch (IllegalArgumentException e) {
-                    log.warn(e);
-                }
-            }
-            return pList;
+            return Arrays.stream(attrString.split(","))
+                .map(x -> CommonUtils.valueOf(ERDViewStyle.class, x))
+                .filter(Objects::nonNull)
+                .toArray(ERDViewStyle[]::new);
         }
-        return new ERDViewStyle[] { ICONS };
+        return new ERDViewStyle[]{ICONS};
     }
 
-    public static void setDefaultStyles(DBPPreferenceStore store, ERDViewStyle[] styles)
-    {
-        String stylesString = ""; //$NON-NLS-1$
+    public static void setDefaultStyles(@NotNull DBPPreferenceStore store, @NotNull ERDViewStyle[] styles) {
+        final StringJoiner buffer = new StringJoiner(",");
         for (ERDViewStyle style : styles) {
-            if (!stylesString.isEmpty()) stylesString += ","; //$NON-NLS-1$
-            stylesString += style.name();
+            buffer.add(style.name());
         }
-        store.setValue(
-            ERDConstants.PREF_ATTR_STYLES,
-            stylesString);
+        store.setValue(ERDConstants.PREF_ATTR_STYLES, buffer.toString());
     }
 
 }

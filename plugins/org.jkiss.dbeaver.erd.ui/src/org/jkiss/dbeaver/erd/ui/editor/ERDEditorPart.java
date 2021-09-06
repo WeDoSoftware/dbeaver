@@ -42,6 +42,7 @@ import org.eclipse.jface.util.PropertyChangeEvent;
 import org.eclipse.jface.viewers.ISelection;
 import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.jface.viewers.Viewer;
+import org.eclipse.osgi.util.NLS;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.printing.PrintDialog;
 import org.eclipse.swt.printing.Printer;
@@ -753,6 +754,7 @@ public abstract class ERDEditorPart extends GraphicalEditorWithFlyoutPalette
         asMenu.add(new ChangeAttributePresentationAction(ERDViewStyle.NULLABILITY));
         asMenu.add(new ChangeAttributePresentationAction(ERDViewStyle.COMMENTS));
         asMenu.add(new ChangeAttributePresentationAction(ERDViewStyle.ENTITY_FQN));
+        asMenu.add(new ChangeAttributePresentationAction(ERDViewStyle.ALPHABETICAL_ORDER));
         menu.add(asMenu);
 
         if (getDiagram().getDecorator().supportsAttributeVisibility()) {
@@ -1000,7 +1002,7 @@ public abstract class ERDEditorPart extends GraphicalEditorWithFlyoutPalette
     private class ChangeAttributePresentationAction extends Action {
         private final ERDViewStyle style;
         public ChangeAttributePresentationAction(ERDViewStyle style) {
-            super("Show " + style.getTitle(), AS_CHECK_BOX);
+            super(NLS.bind(ERDUIMessages.menu_view_style_show_prefix, style.getTitle()), AS_CHECK_BOX);
             this.style = style;
         }
         @Override

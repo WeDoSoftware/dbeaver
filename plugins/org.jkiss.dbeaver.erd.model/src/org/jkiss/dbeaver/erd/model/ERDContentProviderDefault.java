@@ -49,10 +49,10 @@ public class ERDContentProviderDefault implements ERDContentProvider {
     @Override
     public void fillEntityFromObject(@NotNull DBRProgressMonitor monitor, @NotNull ERDDiagram diagram, List<ERDEntity> otherEntities, @NotNull ERDEntity erdEntity) {
         ERDAttributeVisibility attributeVisibility = ERDAttributeVisibility.ALL;
-        fillEntityFromObject(monitor, erdEntity, attributeVisibility);
+        fillEntityFromObject(monitor, erdEntity, attributeVisibility, false);
     }
 
-    protected void fillEntityFromObject(@NotNull DBRProgressMonitor monitor, ERDEntity erdEntity, ERDAttributeVisibility attributeVisibility) {
+    protected void fillEntityFromObject(@NotNull DBRProgressMonitor monitor, ERDEntity erdEntity, ERDAttributeVisibility attributeVisibility, boolean alphabeticalOrder) {
         DBSEntity entity = erdEntity.getObject();
         if (entity instanceof DBPObjectWithLazyDescription) {
             try {
@@ -126,6 +126,9 @@ public class ERDContentProviderDefault implements ERDContentProvider {
                         boolean inPrimaryKey = idColumns != null && idColumns.contains(attribute);
                         ERDEntityAttribute c1 = new ERDEntityAttribute(attribute, inPrimaryKey);
                         erdEntity.addAttribute(c1, false);
+                    }
+                    if (alphabeticalOrder) {
+                        erdEntity.sortAttributes(DBUtils.nameComparator(), false);
                     }
                 }
             } catch (DBException e) {
