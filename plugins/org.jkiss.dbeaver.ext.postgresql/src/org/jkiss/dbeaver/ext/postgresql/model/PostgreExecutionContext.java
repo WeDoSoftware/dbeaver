@@ -86,7 +86,8 @@ public class PostgreExecutionContext extends JDBCExecutionContext implements DBC
     }
 
     @Override
-    public void setDefaultCatalog(DBRProgressMonitor monitor, PostgreDatabase catalog, PostgreSchema schema) throws DBCException {
+    public void setDefaultCatalog(@NotNull DBRProgressMonitor monitor, @NotNull PostgreDatabase catalog, @Nullable PostgreSchema schema)
+            throws DBCException {
         setDefaultCatalog(monitor, catalog, schema, false);
     }
 

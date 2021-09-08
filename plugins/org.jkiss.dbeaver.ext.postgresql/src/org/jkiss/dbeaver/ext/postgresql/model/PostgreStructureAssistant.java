@@ -19,45 +19,35 @@ package org.jkiss.dbeaver.ext.postgresql.model;
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
+import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.ext.postgresql.PostgreUtils;
 import org.jkiss.dbeaver.model.DBUtils;
+import org.jkiss.dbeaver.model.exec.DBCExecutionPurpose;
 import org.jkiss.dbeaver.model.exec.jdbc.JDBCPreparedStatement;
 import org.jkiss.dbeaver.model.exec.jdbc.JDBCResultSet;
 import org.jkiss.dbeaver.model.exec.jdbc.JDBCSession;
-import org.jkiss.dbeaver.model.impl.jdbc.JDBCDataSource;
-import org.jkiss.dbeaver.model.impl.jdbc.JDBCStructureAssistant;
 import org.jkiss.dbeaver.model.impl.jdbc.JDBCUtils;
 import org.jkiss.dbeaver.model.impl.struct.AbstractObjectReference;
 import org.jkiss.dbeaver.model.impl.struct.RelationalObjectType;
+import org.jkiss.dbeaver.model.messages.ModelMessages;
 import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
 import org.jkiss.dbeaver.model.sql.SQLUtils;
-import org.jkiss.dbeaver.model.struct.DBSObject;
-import org.jkiss.dbeaver.model.struct.DBSObjectFilter;
-import org.jkiss.dbeaver.model.struct.DBSObjectReference;
-import org.jkiss.dbeaver.model.struct.DBSObjectType;
+import org.jkiss.dbeaver.model.struct.*;
 import org.jkiss.utils.CommonUtils;
 
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 /**
  * PostgreStructureAssistant
  */
-public class PostgreStructureAssistant extends JDBCStructureAssistant<PostgreExecutionContext> {
+public class PostgreStructureAssistant implements DBSStructureAssistant<PostgreExecutionContext> {
+    private static final Log log = Log.getLog(PostgreStructureAssistant.class);
+
     private final PostgreDataSource dataSource;
 
-    public PostgreStructureAssistant(PostgreDataSource dataSource)
-    {
+    PostgreStructureAssistant(PostgreDataSource dataSource) {
         this.dataSource = dataSource;
-    }
-
-    @Override
-    protected JDBCDataSource getDataSource()
-    {
-        return dataSource;
     }
 
     @Override
@@ -101,16 +91,15 @@ public class PostgreStructureAssistant extends JDBCStructureAssistant<PostgreExe
         };
     }
 
+    @NotNull
     @Override
-    protected void findObjectsByMask(@NotNull PostgreExecutionContext executionContext, @NotNull JDBCSession session,
-                                     @NotNull DBSObjectType objectType, @NotNull ObjectsSearchParams params,
-                                     @NotNull List<DBSObjectReference> references) throws DBException, SQLException {
+    public List<DBSObjectReference> findObjectsByMask(@NotNull DBRProgressMonitor monitor, @NotNull PostgreExecutionContext executionContext,
+                                                      @NotNull ObjectsSearchParams params) throws DBException {
         DBSObject parentObject = params.getParentObject();
         PostgreSchema ownerSchema = parentObject instanceof PostgreSchema ? (PostgreSchema) parentObject : null;
-        final PostgreDataSource dataSource = (PostgreDataSource) session.getDataSource();
 
         PostgreDatabase database = parentObject instanceof PostgreObject ?
-                ((PostgreObject) parentObject).getDatabase() : executionContext.getDefaultCatalog();
+            ((PostgreObject) parentObject).getDatabase() : executionContext.getDefaultCatalog();
         if (database == null) {
             database = dataSource.getDefaultInstance();
         }
@@ -120,12 +109,12 @@ public class PostgreStructureAssistant extends JDBCStructureAssistant<PostgreExe
         } else if (!params.isGlobalSearch()) {
             // Limit object search with search path
             for (String sn : executionContext.getSearchPath()) {
-                PostgreSchema schema = database.getSchema(session.getProgressMonitor(), PostgreUtils.getRealSchemaName(database, sn));
+                PostgreSchema schema = database.getSchema(monitor, PostgreUtils.getRealSchemaName(database, sn));
                 if (schema != null) {
                     nsList.add(schema);
                 }
             }
-            PostgreSchema pgCatalog = database.getCatalogSchema(session.getProgressMonitor());
+            PostgreSchema pgCatalog = database.getCatalogSchema(monitor);
             if (pgCatalog != null) {
                 nsList.add(pgCatalog);
             }
@@ -133,7 +122,7 @@ public class PostgreStructureAssistant extends JDBCStructureAssistant<PostgreExe
             // Limit object search with available schemas (use filters - #648)
             DBSObjectFilter schemaFilter = dataSource.getContainer().getObjectFilter(PostgreSchema.class, database, true);
             if (schemaFilter != null && schemaFilter.isEnabled()) {
-                for (PostgreSchema schema : database.getSchemas(session.getProgressMonitor())) {
+                for (PostgreSchema schema : database.getSchemas(monitor)) {
                     if (schemaFilter.matches(schema.getName())) {
                         nsList.add(schema);
                     }
@@ -141,15 +130,38 @@ public class PostgreStructureAssistant extends JDBCStructureAssistant<PostgreExe
             }
         }
 
-        if (objectType == RelationalObjectType.TYPE_TABLE) {
-            findTablesByMask(session, database, nsList, params, references);
-        } else if (objectType == RelationalObjectType.TYPE_CONSTRAINT) {
-            findConstraintsByMask(session, database, nsList, params, references);
-        } else if (objectType == RelationalObjectType.TYPE_PROCEDURE) {
-            findProceduresByMask(session, database, nsList, params, references);
-        } else if (objectType == RelationalObjectType.TYPE_TABLE_COLUMN) {
-            findTableColumnsByMask(session, database, nsList, params, references);
+        List<DBSObjectReference> references = new ArrayList<>();
+
+        boolean catalogChangeRequired = executionContext.getDefaultCatalog() != database;
+        try {
+            if (catalogChangeRequired) {
+                executionContext = executionContext.getDataSource().createExecutionContext(database, "Metadata search");
+            }
+            try (JDBCSession session = executionContext.openSession(monitor, DBCExecutionPurpose.META, ModelMessages.model_jdbc_find_objects_by_name)) {
+                for (DBSObjectType type : params.getObjectTypes()) {
+                    if (type == RelationalObjectType.TYPE_TABLE) {
+                        findTablesByMask(session, database, nsList, params, references);
+                    } else if (type == RelationalObjectType.TYPE_CONSTRAINT) {
+                        findConstraintsByMask(session, database, nsList, params, references);
+                    } else if (type == RelationalObjectType.TYPE_PROCEDURE) {
+                        findProceduresByMask(session, database, nsList, params, references);
+                    } else if (type == RelationalObjectType.TYPE_TABLE_COLUMN) {
+                        findTableColumnsByMask(session, database, nsList, params, references);
+                    }
+                    if (references.size() >= params.getMaxResults()) {
+                        break;
+                    }
+                }
+            } catch (SQLException ex) {
+                throw new DBException(ex, dataSource);
+            }
+        } finally {
+            if (catalogChangeRequired) {
+                executionContext.close();
+            }
         }
+
+        return references;
     }
 
     private static void findTablesByMask(@NotNull JDBCSession session, @NotNull PostgreDatabase database, @NotNull final List<PostgreSchema> schemas,
